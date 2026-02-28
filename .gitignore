@@ -1,0 +1,5 @@
+package/dist/
+package/aux4-jobs
+aux4-jobs
+go.sum
+.DS_Store

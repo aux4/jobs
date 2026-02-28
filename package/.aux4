@@ -1,0 +1,92 @@
+{
+  "scope": "aux4",
+  "name": "jobs",
+  "version": "1.0.0",
+  "description": "Background job manager for aux4",
+  "license": "Apache-2.0",
+  "tags": ["aux4", "jobs", "background", "process"],
+  "profiles": [
+    {
+      "name": "main",
+      "commands": [
+        {
+          "name": "jobs",
+          "execute": ["profile:jobs"],
+          "help": { "text": "Background job management" }
+        }
+      ]
+    },
+    {
+      "name": "jobs",
+      "commands": [
+        {
+          "name": "run",
+          "execute": ["${packageDir}/aux4-jobs run values(command)"],
+          "help": {
+            "text": "Run a command in the background",
+            "variables": [
+              { "name": "command", "text": "Command to run in the background", "arg": true }
+            ]
+          }
+        },
+        {
+          "name": "list",
+          "execute": ["${packageDir}/aux4-jobs list value(state)"],
+          "help": {
+            "text": "List jobs",
+            "variables": [
+              { "name": "state", "text": "Filter by state", "default": "", "options": ["RUNNING", "COMPLETED", "FAILED", "KILLED"] }
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "execute": ["${packageDir}/aux4-jobs status value(id)"],
+          "help": {
+            "text": "Show job status",
+            "variables": [
+              { "name": "id", "text": "Job ID", "arg": true }
+            ]
+          }
+        },
+        {
+          "name": "output",
+          "execute": ["${packageDir}/aux4-jobs output values(id, stream)"],
+          "help": {
+            "text": "Show job output",
+            "variables": [
+              { "name": "id", "text": "Job ID", "arg": true },
+              { "name": "stream", "text": "Output stream", "default": "stdout", "options": ["stdout", "stderr"] }
+            ]
+          }
+        },
+        {
+          "name": "tail",
+          "execute": ["alias:${packageDir}/aux4-jobs tail values(id, stream)"],
+          "help": {
+            "text": "Tail job output in real time",
+            "variables": [
+              { "name": "id", "text": "Job ID", "arg": true },
+              { "name": "stream", "text": "Output stream", "default": "stdout", "options": ["stdout", "stderr"] }
+            ]
+          }
+        },
+        {
+          "name": "kill",
+          "execute": ["${packageDir}/aux4-jobs kill value(id)"],
+          "help": {
+            "text": "Kill a running job",
+            "variables": [
+              { "name": "id", "text": "Job ID", "arg": true }
+            ]
+          }
+        },
+        {
+          "name": "killall",
+          "execute": ["${packageDir}/aux4-jobs killall"],
+          "help": { "text": "Kill all running jobs" }
+        }
+      ]
+    }
+  ]
+}
