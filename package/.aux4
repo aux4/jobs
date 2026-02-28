@@ -1,7 +1,7 @@
 {
   "scope": "aux4",
   "name": "jobs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Background job manager for aux4",
   "license": "Apache-2.0",
   "tags": [
