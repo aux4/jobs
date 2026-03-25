@@ -1,6 +1,7 @@
 {
   "scope": "aux4",
   "name": "jobs",
+
   "version": "1.0.3",
   "description": "Background job manager for aux4",
   "license": "Apache-2.0",
@@ -159,6 +160,68 @@
                 "name": "id",
                 "text": "Job ID",
                 "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "on",
+          "execute": [
+            "${packageDir}/aux4-jobs on values(id, success, failure, complete)"
+          ],
+          "help": {
+            "text": "Register callbacks on a running job",
+            "variables": [
+              {
+                "name": "id",
+                "text": "Job ID",
+                "arg": true
+              },
+              {
+                "name": "success",
+                "text": "Command to run on success (exit code 0)",
+                "default": ""
+              },
+              {
+                "name": "failure",
+                "text": "Command to run on failure (non-zero exit code)",
+                "default": ""
+              },
+              {
+                "name": "complete",
+                "text": "Command to run on completion (any terminal state)",
+                "default": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "attach",
+          "execute": [
+            "${packageDir}/aux4-jobs attach values(pid, command, stdout, stderr)"
+          ],
+          "help": {
+            "text": "Attach a running process to the jobs system",
+            "variables": [
+              {
+                "name": "pid",
+                "text": "Process ID to attach",
+                "arg": true
+              },
+              {
+                "name": "command",
+                "text": "Command description (for display purposes)",
+                "arg": true
+              },
+              {
+                "name": "stdout",
+                "text": "Path to stdout file being written by the process",
+                "default": ""
+              },
+              {
+                "name": "stderr",
+                "text": "Path to stderr file being written by the process",
+                "default": ""
               }
             ]
           }

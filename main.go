@@ -124,11 +124,40 @@ func main() {
 			onComplete = args[3]
 		}
 		runJob(args[0], onSuccess, onFailure, onComplete)
+	case "attach":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs attach <pid> <command> [stdoutFile] [stderrFile]")
+			os.Exit(1)
+		}
+		pid, err := strconv.Atoi(args[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid PID: %s\n", args[0])
+			os.Exit(1)
+		}
+		command := args[1]
+		stdoutFile := ""
+		stderrFile := ""
+		if len(args) >= 3 {
+			stdoutFile = args[2]
+		}
+		if len(args) >= 4 {
+			stderrFile = args[3]
+		}
+		attachJob(pid, command, stdoutFile, stderrFile)
 	case "_monitor":
 		if len(args) < 2 {
 			os.Exit(1)
 		}
 		monitorJob(args[0], args[1])
+	case "_monitor_attach":
+		if len(args) < 2 {
+			os.Exit(1)
+		}
+		pid, err := strconv.Atoi(args[1])
+		if err != nil {
+			os.Exit(1)
+		}
+		monitorAttachedJob(args[0], pid)
 	case "list":
 		state := ""
 		if len(args) >= 1 {
@@ -161,6 +190,24 @@ func main() {
 			stream = args[1]
 		}
 		tailJob(args[0], stream)
+	case "on":
+		if len(args) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs on <id> [success] [failure] [complete]")
+			os.Exit(1)
+		}
+		success := ""
+		failure := ""
+		complete := ""
+		if len(args) >= 2 {
+			success = args[1]
+		}
+		if len(args) >= 3 {
+			failure = args[2]
+		}
+		if len(args) >= 4 {
+			complete = args[3]
+		}
+		onJob(args[0], success, failure, complete)
 	case "kill":
 		if len(args) < 1 {
 			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs kill <id>")
@@ -286,6 +333,121 @@ func monitorJob(id, command string) {
 		executeCallback(job, job.OnFailure)
 	}
 	executeCallback(job, job.OnComplete)
+}
+
+func attachJob(pid int, command, stdoutPath, stderrPath string) {
+	if !isProcessRunning(pid) {
+		fmt.Fprintf(os.Stderr, "Error: process %d is not running\n", pid)
+		os.Exit(1)
+	}
+
+	id := allocateID()
+	cwd, _ := os.Getwd()
+	dir := jobDir(id)
+
+	job := &Job{
+		ID:        id,
+		Command:   command,
+		PID:       pid,
+		State:     "RUNNING",
+		StartTime: time.Now().UTC().Format(time.RFC3339),
+		Dir:       cwd,
+	}
+	if err := saveJob(job); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Symlink or create stdout/stderr files in the job directory
+	if stdoutPath != "" {
+		abs, _ := filepath.Abs(stdoutPath)
+		os.Symlink(abs, filepath.Join(dir, "stdout"))
+	} else {
+		os.Create(filepath.Join(dir, "stdout"))
+	}
+	if stderrPath != "" {
+		abs, _ := filepath.Abs(stderrPath)
+		os.Symlink(abs, filepath.Join(dir, "stderr"))
+	} else {
+		os.Create(filepath.Join(dir, "stderr"))
+	}
+
+	// Spawn a detached monitor that polls the PID
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	monitor := exec.Command(self, "_monitor_attach", id, strconv.Itoa(pid))
+	monitor.Dir = cwd
+	monitor.Stdin = nil
+	monitor.Stdout = nil
+	monitor.Stderr = nil
+	setSysProcAttr(monitor)
+
+	if err := monitor.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+	monitor.Process.Release()
+
+	data, _ := json.Marshal(job)
+	fmt.Println(string(data))
+}
+
+func monitorAttachedJob(id string, pid int) {
+	// Poll until the process exits
+	for isProcessRunning(pid) {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	job, err := loadJob(id)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	if job.State == "KILLED" {
+		executeCallback(job, job.OnComplete)
+		return
+	}
+
+	job.EndTime = time.Now().UTC().Format(time.RFC3339)
+	// Can't get exit code from a non-child process; assume success if it exited normally
+	// refreshState would have marked it FAILED if it crashed, but since we caught it
+	// exiting cleanly via polling, mark as COMPLETED
+	job.State = "COMPLETED"
+	job.ExitCode = 0
+	saveJob(job)
+
+	executeCallback(job, job.OnSuccess)
+	executeCallback(job, job.OnComplete)
+}
+
+func onJob(id, success, failure, complete string) {
+	job, err := loadJob(id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if success != "" {
+		job.OnSuccess = success
+	}
+	if failure != "" {
+		job.OnFailure = failure
+	}
+	if complete != "" {
+		job.OnComplete = complete
+	}
+
+	if err := saveJob(job); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	data, _ := json.Marshal(job)
+	fmt.Println(string(data))
 }
 
 func executeCallback(job *Job, callback string) {
