@@ -31,7 +31,7 @@
         {
           "name": "run",
           "execute": [
-            "${packageDir}/aux4-jobs run values(command)"
+            "${packageDir}/aux4-jobs run values(command, onSuccess, onFailure, onComplete)"
           ],
           "help": {
             "text": "Run a command in the background",
@@ -40,6 +40,21 @@
                 "name": "command",
                 "text": "Command to run in the background",
                 "arg": true
+              },
+              {
+                "name": "onSuccess",
+                "text": "Command to run on success (exit code 0)",
+                "default": ""
+              },
+              {
+                "name": "onFailure",
+                "text": "Command to run on failure (non-zero exit code)",
+                "default": ""
+              },
+              {
+                "name": "onComplete",
+                "text": "Command to run on completion (any terminal state)",
+                "default": ""
               }
             ]
           }

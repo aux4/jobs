@@ -125,11 +125,37 @@ job 1 killed
 job 3 killed
 ```
 
+### Callbacks
+
+Run a command automatically when a job finishes using `--onSuccess`, `--onFailure`, or `--onComplete`:
+
+```bash
+aux4 jobs run "npm test" --onSuccess "echo Tests passed" --onFailure "echo Tests FAILED"
+```
+
+Use `--onComplete` to run a command on any terminal state (success, failure, or killed):
+
+```bash
+aux4 jobs run "deploy.sh" --onComplete "echo Job finished with state $AUX4_JOB_STATE"
+```
+
+Callbacks run via `sh -c` in the job's working directory. If both a specific callback (`onSuccess`/`onFailure`) and `onComplete` are set, the specific one runs first.
+
+#### Callback Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `AUX4_JOB_ID` | Job ID | `3` |
+| `AUX4_JOB_STATE` | Terminal state | `COMPLETED`, `FAILED`, `KILLED` |
+| `AUX4_JOB_EXIT_CODE` | Exit code | `0`, `1`, `-1` |
+| `AUX4_JOB_COMMAND` | Original command | `npm test` |
+| `AUX4_JOB_DIR` | Working directory | `/home/user/project` |
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `aux4 jobs run <command>` | Run a command in the background |
+| `aux4 jobs run <command> [--onSuccess] [--onFailure] [--onComplete]` | Run a command in the background with optional callbacks |
 | `aux4 jobs list [--state <RUNNING\|COMPLETED\|FAILED\|KILLED>]` | List jobs, optionally filtered by state |
 | `aux4 jobs status <id>` | Show job status with exit code and duration |
 | `aux4 jobs output <id> [--stream stdout\|stderr]` | Show full job output |

@@ -13,14 +13,17 @@ import (
 )
 
 type Job struct {
-	ID        string `json:"id"`
-	Command   string `json:"command"`
-	PID       int    `json:"pid"`
-	State     string `json:"state"`
-	ExitCode  int    `json:"exitCode"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime,omitempty"`
-	Dir       string `json:"dir"`
+	ID         string `json:"id"`
+	Command    string `json:"command"`
+	PID        int    `json:"pid"`
+	State      string `json:"state"`
+	ExitCode   int    `json:"exitCode"`
+	StartTime  string `json:"startTime"`
+	EndTime    string `json:"endTime,omitempty"`
+	Dir        string `json:"dir"`
+	OnSuccess  string `json:"onSuccess,omitempty"`
+	OnFailure  string `json:"onFailure,omitempty"`
+	OnComplete string `json:"onComplete,omitempty"`
 }
 
 func baseDir() string {
@@ -105,10 +108,22 @@ func main() {
 	switch cmd {
 	case "run":
 		if len(args) < 1 {
-			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs run <command>")
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs run <command> [onSuccess] [onFailure] [onComplete]")
 			os.Exit(1)
 		}
-		runJob(args[0])
+		onSuccess := ""
+		onFailure := ""
+		onComplete := ""
+		if len(args) >= 2 {
+			onSuccess = args[1]
+		}
+		if len(args) >= 3 {
+			onFailure = args[2]
+		}
+		if len(args) >= 4 {
+			onComplete = args[3]
+		}
+		runJob(args[0], onSuccess, onFailure, onComplete)
 	case "_monitor":
 		if len(args) < 2 {
 			os.Exit(1)
@@ -160,16 +175,19 @@ func main() {
 	}
 }
 
-func runJob(command string) {
+func runJob(command, onSuccess, onFailure, onComplete string) {
 	id := allocateID()
 	cwd, _ := os.Getwd()
 
 	job := &Job{
-		ID:        id,
-		Command:   command,
-		State:     "RUNNING",
-		StartTime: time.Now().UTC().Format(time.RFC3339),
-		Dir:       cwd,
+		ID:         id,
+		Command:    command,
+		State:      "RUNNING",
+		StartTime:  time.Now().UTC().Format(time.RFC3339),
+		Dir:        cwd,
+		OnSuccess:  onSuccess,
+		OnFailure:  onFailure,
+		OnComplete: onComplete,
 	}
 	if err := saveJob(job); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -242,6 +260,7 @@ func monitorJob(id, command string) {
 
 	job, _ = loadJob(id)
 	if job.State == "KILLED" {
+		executeCallback(job, job.OnComplete)
 		return
 	}
 
@@ -260,6 +279,34 @@ func monitorJob(id, command string) {
 		job.State = "COMPLETED"
 	}
 	saveJob(job)
+
+	if job.State == "COMPLETED" {
+		executeCallback(job, job.OnSuccess)
+	} else if job.State == "FAILED" {
+		executeCallback(job, job.OnFailure)
+	}
+	executeCallback(job, job.OnComplete)
+}
+
+func executeCallback(job *Job, callback string) {
+	if callback == "" {
+		return
+	}
+	cmd := exec.Command("sh", "-c", callback)
+	cmd.Dir = job.Dir
+	cmd.Env = append(os.Environ(),
+		"AUX4_JOB_ID="+job.ID,
+		"AUX4_JOB_STATE="+job.State,
+		"AUX4_JOB_EXIT_CODE="+strconv.Itoa(job.ExitCode),
+		"AUX4_JOB_COMMAND="+job.Command,
+		"AUX4_JOB_DIR="+job.Dir,
+	)
+	stderrPath := filepath.Join(jobDir(job.ID), "stderr")
+	if f, err := os.OpenFile(stderrPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
+		cmd.Stderr = f
+		defer f.Close()
+	}
+	cmd.Run()
 }
 
 func loadAllJobs() []*Job {

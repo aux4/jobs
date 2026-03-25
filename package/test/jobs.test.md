@@ -189,3 +189,55 @@ aux4 jobs run "exit 42" && sleep 1 && aux4 jobs status 5 | jq .
   **
 }
 ```
+
+## callbacks
+
+### should run onSuccess callback on success
+
+```execute
+aux4 jobs run "echo hello" --onSuccess "echo onSuccess=called > .jobs/cb-success.txt" > /dev/null && sleep 1 && cat .jobs/cb-success.txt
+```
+
+```expect
+onSuccess=called
+```
+
+### should run onFailure callback on failure
+
+```execute
+aux4 jobs run "exit 1" --onFailure "echo onFailure=called > .jobs/cb-failure.txt" > /dev/null && sleep 1 && cat .jobs/cb-failure.txt
+```
+
+```expect
+onFailure=called
+```
+
+### should run onComplete callback on any state
+
+```execute
+aux4 jobs run "echo done" --onComplete "echo onComplete=called > .jobs/cb-complete.txt" > /dev/null && sleep 1 && cat .jobs/cb-complete.txt
+```
+
+```expect
+onComplete=called
+```
+
+### should not run onSuccess on failure
+
+```execute
+aux4 jobs run "exit 1" --onSuccess "echo onSuccess=called > .jobs/cb-wrong.txt" > /dev/null && sleep 1 && test ! -f .jobs/cb-wrong.txt && echo "onSuccess=not called"
+```
+
+```expect
+onSuccess=not called
+```
+
+### should set environment variables in callback
+
+```execute
+aux4 jobs run "echo hi" --onComplete 'echo state=$AUX4_JOB_STATE > .jobs/cb-env.txt' > /dev/null && sleep 1 && cat .jobs/cb-env.txt
+```
+
+```expect
+state=COMPLETED
+```
