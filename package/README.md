@@ -151,24 +151,84 @@ Callbacks run via `sh -c` in the job's working directory. If both a specific cal
 | `AUX4_JOB_COMMAND` | Original command | `npm test` |
 | `AUX4_JOB_DIR` | Working directory | `/home/user/project` |
 
+### Source tags
+
+Tag jobs with a source identifier so multiple agents sharing the same jobs directory can list only their own jobs:
+
+```bash
+aux4 jobs run "long-task.sh" --source agent-a
+aux4 jobs list --source agent-a
+```
+
+### Auto-cleanup
+
+Use `--cleanup true` to remove the job directory automatically after callbacks finish:
+
+```bash
+aux4 jobs run "send-notification.sh" --cleanup true
+```
+
+This is useful for fire-and-forget jobs whose output doesn't need to be retained.
+
+### Custom storage path
+
+Use `--path` on any command to use a different storage directory than the default `.jobs`:
+
+```bash
+aux4 jobs run "build.sh" --path .my-jobs
+aux4 jobs list --path .my-jobs
+```
+
+This lets multiple agents fully isolate their jobs from each other.
+
+### Removing jobs
+
+Remove a single finished job:
+
+```bash
+aux4 jobs remove 3
+```
+
+Force-remove a running job (kills it first):
+
+```bash
+aux4 jobs remove 3 --force true
+```
+
+Remove all finished jobs created by a specific source:
+
+```bash
+aux4 jobs remove-all --source agent-a
+```
+
+Remove only failed jobs:
+
+```bash
+aux4 jobs remove-all --state FAILED
+```
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `aux4 jobs run <command> [--onSuccess] [--onFailure] [--onComplete]` | Run a command in the background with optional callbacks |
-| `aux4 jobs list [--state <RUNNING\|COMPLETED\|FAILED\|KILLED>]` | List jobs, optionally filtered by state |
-| `aux4 jobs status <id>` | Show job status with exit code and duration |
-| `aux4 jobs output <id> [--stream stdout\|stderr]` | Show full job output |
-| `aux4 jobs tail <id> [--stream stdout\|stderr]` | Tail job output in real time |
-| `aux4 jobs kill <id>` | Kill a running job |
-| `aux4 jobs killall` | Kill all running jobs |
+| `aux4 jobs run <command> [--onSuccess] [--onFailure] [--onComplete] [--source] [--cleanup] [--path]` | Run a command in the background with optional callbacks, source tag, auto-cleanup, and storage path |
+| `aux4 jobs list [--state] [--source] [--path]` | List jobs, optionally filtered by state and/or source |
+| `aux4 jobs status <id> [--path]` | Show job status with exit code and duration |
+| `aux4 jobs output <id> [--stream] [--path]` | Show full job output |
+| `aux4 jobs tail <id> [--stream] [--path]` | Tail job output in real time |
+| `aux4 jobs kill <id> [--path]` | Kill a running job |
+| `aux4 jobs killall [--path]` | Kill all running jobs |
+| `aux4 jobs remove <id> [--force] [--path]` | Remove a finished job from storage |
+| `aux4 jobs remove-all [--state] [--source] [--path]` | Remove all finished jobs (optionally filtered) |
+| `aux4 jobs on <id> [--success] [--failure] [--complete]` | Register callbacks on a running job |
+| `aux4 jobs attach <pid> <command> [--stdout] [--stderr] [--source] [--path]` | Attach an external process to the jobs system |
 
 ## How It Works
 
-Jobs are stored in `.jobs/` in the current directory. Each job gets its own directory containing:
+Jobs are stored in `.jobs/` in the current directory by default (override with `--path`). Each job gets its own directory containing:
 
-- `job.json` — job metadata (command, PID, state, timestamps)
+- `job.json` — job metadata (command, PID, state, timestamps, source, cleanup flag)
 - `stdout` — captured standard output
 - `stderr` — captured standard error
 
-A background monitor process waits for the command to finish and updates the job state with the exit code and end time.
+A background monitor process waits for the command to finish and updates the job state with the exit code and end time. If `cleanup: true` was set, the directory is removed after callbacks run.

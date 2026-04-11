@@ -1,16 +1,20 @@
 #### Description
 
-The `list` command outputs all jobs as a JSON array. Jobs are sorted by ID in ascending order. Use `--state` to filter by a specific state.
+The `list` command outputs all jobs as a JSON array. Jobs are sorted by ID in ascending order. Filter the output by state, source tag, or both.
 
 Possible job states are: `RUNNING`, `COMPLETED`, `FAILED`, `KILLED`.
+
+The `--source` filter is useful when multiple agents share the same jobs directory: each agent can tag its jobs with a unique source on creation (`jobs run --source agent-a`) and later list only its own jobs (`jobs list --source agent-a`).
 
 #### Usage
 
 ```bash
-aux4 jobs list [--state <RUNNING|COMPLETED|FAILED|KILLED>]
+aux4 jobs list [--state <RUNNING|COMPLETED|FAILED|KILLED>] [--source <tag>] [--path <dir>]
 ```
 
---state  Filter jobs by state (default: show all)
+--state   Filter jobs by state (default: show all)
+--source  Filter jobs by source tag (default: show all)
+--path    Custom jobs storage directory (default: `.jobs`)
 
 #### Example
 
@@ -49,4 +53,16 @@ aux4 jobs list --state RUNNING
     "dir": "/home/user"
   }
 ]
+```
+
+Filter by source tag:
+
+```bash
+aux4 jobs list --source agent-a
+```
+
+Combine filters:
+
+```bash
+aux4 jobs list --state COMPLETED --source agent-a
 ```

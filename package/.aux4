@@ -1,7 +1,7 @@
 {
   "scope": "aux4",
   "name": "jobs",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Background job manager for aux4",
   "license": "Apache-2.0",
   "tags": [
@@ -31,7 +31,7 @@
         {
           "name": "run",
           "execute": [
-            "${packageDir}/aux4-jobs run values(command, onSuccess, onFailure, onComplete)"
+            "${packageDir}/aux4-jobs --path value(path) run values(command, onSuccess, onFailure, onComplete, source, cleanup)"
           ],
           "help": {
             "text": "Run a command in the background",
@@ -55,6 +55,25 @@
                 "name": "onComplete",
                 "text": "Command to run on completion (any terminal state)",
                 "default": ""
+              },
+              {
+                "name": "source",
+                "text": "Tag identifying who created the job (for filtering)",
+                "default": ""
+              },
+              {
+                "name": "cleanup",
+                "text": "Remove the job directory after completion",
+                "default": "false",
+                "options": [
+                  "true",
+                  "false"
+                ]
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -62,7 +81,7 @@
         {
           "name": "list",
           "execute": [
-            "${packageDir}/aux4-jobs list value(state)"
+            "${packageDir}/aux4-jobs --path value(path) list values(state, source)"
           ],
           "help": {
             "text": "List jobs",
@@ -77,6 +96,16 @@
                   "FAILED",
                   "KILLED"
                 ]
+              },
+              {
+                "name": "source",
+                "text": "Filter by source tag",
+                "default": ""
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -84,7 +113,7 @@
         {
           "name": "status",
           "execute": [
-            "${packageDir}/aux4-jobs status value(id)"
+            "${packageDir}/aux4-jobs --path value(path) status value(id)"
           ],
           "help": {
             "text": "Show job status",
@@ -93,6 +122,11 @@
                 "name": "id",
                 "text": "Job ID",
                 "arg": true
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -100,7 +134,7 @@
         {
           "name": "output",
           "execute": [
-            "${packageDir}/aux4-jobs output values(id, stream)"
+            "${packageDir}/aux4-jobs --path value(path) output values(id, stream)"
           ],
           "help": {
             "text": "Show job output",
@@ -118,6 +152,11 @@
                   "stdout",
                   "stderr"
                 ]
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -125,7 +164,7 @@
         {
           "name": "tail",
           "execute": [
-            "alias:${packageDir}/aux4-jobs tail values(id, stream)"
+            "alias:${packageDir}/aux4-jobs --path value(path) tail values(id, stream)"
           ],
           "help": {
             "text": "Tail job output in real time",
@@ -143,6 +182,11 @@
                   "stdout",
                   "stderr"
                 ]
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -150,7 +194,7 @@
         {
           "name": "kill",
           "execute": [
-            "${packageDir}/aux4-jobs kill value(id)"
+            "${packageDir}/aux4-jobs --path value(path) kill value(id)"
           ],
           "help": {
             "text": "Kill a running job",
@@ -159,6 +203,11 @@
                 "name": "id",
                 "text": "Job ID",
                 "arg": true
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -166,7 +215,7 @@
         {
           "name": "on",
           "execute": [
-            "${packageDir}/aux4-jobs on values(id, success, failure, complete)"
+            "${packageDir}/aux4-jobs --path value(path) on values(id, success, failure, complete)"
           ],
           "help": {
             "text": "Register callbacks on a running job",
@@ -190,6 +239,11 @@
                 "name": "complete",
                 "text": "Command to run on completion (any terminal state)",
                 "default": ""
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -197,7 +251,7 @@
         {
           "name": "attach",
           "execute": [
-            "${packageDir}/aux4-jobs attach values(pid, command, stdout, stderr)"
+            "${packageDir}/aux4-jobs --path value(path) attach values(pid, command, stdout, stderr, source)"
           ],
           "help": {
             "text": "Attach a running process to the jobs system",
@@ -221,6 +275,16 @@
                 "name": "stderr",
                 "text": "Path to stderr file being written by the process",
                 "default": ""
+              },
+              {
+                "name": "source",
+                "text": "Tag identifying who created the job (for filtering)",
+                "default": ""
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
               }
             ]
           }
@@ -228,10 +292,78 @@
         {
           "name": "killall",
           "execute": [
-            "${packageDir}/aux4-jobs killall"
+            "${packageDir}/aux4-jobs --path value(path) killall"
           ],
           "help": {
-            "text": "Kill all running jobs"
+            "text": "Kill all running jobs",
+            "variables": [
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
+              }
+            ]
+          }
+        },
+        {
+          "name": "remove",
+          "execute": [
+            "${packageDir}/aux4-jobs --path value(path) remove values(id, force)"
+          ],
+          "help": {
+            "text": "Remove a finished job from storage",
+            "variables": [
+              {
+                "name": "id",
+                "text": "Job ID",
+                "arg": true
+              },
+              {
+                "name": "force",
+                "text": "Force removal even if the job is still running (kills it first)",
+                "default": "false",
+                "options": [
+                  "true",
+                  "false"
+                ]
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
+              }
+            ]
+          }
+        },
+        {
+          "name": "remove-all",
+          "execute": [
+            "${packageDir}/aux4-jobs --path value(path) remove-all values(state, source)"
+          ],
+          "help": {
+            "text": "Remove all finished jobs (optionally filtered by state or source)",
+            "variables": [
+              {
+                "name": "state",
+                "text": "Filter by state",
+                "default": "",
+                "options": [
+                  "COMPLETED",
+                  "FAILED",
+                  "KILLED"
+                ]
+              },
+              {
+                "name": "source",
+                "text": "Filter by source tag",
+                "default": ""
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
+              }
+            ]
           }
         }
       ]

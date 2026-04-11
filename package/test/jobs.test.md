@@ -241,3 +241,116 @@ aux4 jobs run "echo hi" --onComplete 'echo state=$AUX4_JOB_STATE > .jobs/cb-env.
 ```expect
 state=COMPLETED
 ```
+
+## source
+
+### should tag job with source
+
+```execute
+aux4 jobs run "echo tagged" --source agent-x | jq -r .source
+```
+
+```expect
+agent-x
+```
+
+### should filter list by source
+
+```execute
+aux4 jobs run "echo y1" --source agent-y > /dev/null && sleep 1 && aux4 jobs list --source agent-y | jq '. | length'
+```
+
+```expect:regex
+^[1-9][0-9]*$
+```
+
+### should return empty when no source matches
+
+```execute
+aux4 jobs list --source nonexistent
+```
+
+```expect
+[]
+```
+
+## remove
+
+### should remove a finished job
+
+```execute
+aux4 jobs run "echo to-remove" > /tmp/jobs-remove-id.json && sleep 1 && ID=$(jq -r .id /tmp/jobs-remove-id.json) && aux4 jobs remove $ID && rm -f /tmp/jobs-remove-id.json
+```
+
+```expect:partial
+job *? removed
+```
+
+### should fail to remove a running job without force
+
+```execute
+aux4 jobs run "sleep 5" > /tmp/jobs-running-id.json && ID=$(jq -r .id /tmp/jobs-running-id.json) && aux4 jobs remove $ID 2>&1 ; aux4 jobs kill $ID > /dev/null ; rm -f /tmp/jobs-running-id.json
+```
+
+```expect:partial
+Error: job *? is still running
+```
+
+### should remove a running job with force
+
+```execute
+aux4 jobs run "sleep 10" > /tmp/jobs-force-id.json && ID=$(jq -r .id /tmp/jobs-force-id.json) && aux4 jobs remove $ID --force true && rm -f /tmp/jobs-force-id.json
+```
+
+```expect:partial
+job *? removed
+```
+
+## cleanup
+
+### should auto-remove job after completion when cleanup is true
+
+```execute
+aux4 jobs run "echo will-vanish" --source vanish-test --cleanup true > /dev/null && sleep 1 && aux4 jobs list --source vanish-test
+```
+
+```expect
+[]
+```
+
+## custom path
+
+### should use custom storage path
+
+```execute
+rm -rf /tmp/custom-jobs-test && aux4 jobs run "echo isolated" --path /tmp/custom-jobs-test > /dev/null && sleep 1 && aux4 jobs list --path /tmp/custom-jobs-test | jq '. | length'
+```
+
+```expect
+1
+```
+
+### should not pollute default jobs dir when using custom path
+
+```execute
+ls /tmp/custom-jobs-test/1/ | sort && rm -rf /tmp/custom-jobs-test
+```
+
+```expect
+job.json
+stderr
+stdout
+```
+
+## remove-all
+
+### should remove all completed jobs by source
+
+```execute
+aux4 jobs run "echo r1" --source remove-batch > /dev/null && aux4 jobs run "echo r2" --source remove-batch > /dev/null && sleep 1 && aux4 jobs remove-all --source remove-batch && aux4 jobs list --source remove-batch
+```
+
+```expect:partial
+removed
+**[]
+```

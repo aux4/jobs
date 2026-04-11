@@ -21,13 +21,17 @@ type Job struct {
 	StartTime  string `json:"startTime"`
 	EndTime    string `json:"endTime,omitempty"`
 	Dir        string `json:"dir"`
+	Source     string `json:"source,omitempty"`
+	Cleanup    bool   `json:"cleanup,omitempty"`
 	OnSuccess  string `json:"onSuccess,omitempty"`
 	OnFailure  string `json:"onFailure,omitempty"`
 	OnComplete string `json:"onComplete,omitempty"`
 }
 
+var jobsBaseDir = ".jobs"
+
 func baseDir() string {
-	return ".jobs"
+	return jobsBaseDir
 }
 
 func jobDir(id string) string {
@@ -97,23 +101,44 @@ func formatDuration(job *Job) string {
 }
 
 func main() {
+	// Allow override via env var (used by spawned monitor processes to inherit path)
+	if env := os.Getenv("AUX4_JOBS_DIR"); env != "" {
+		jobsBaseDir = env
+	}
+
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: aux4-jobs <command> [args...]")
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
+	// Extract --path flag from args (can appear anywhere)
+	rawArgs := os.Args[1:]
+	filteredArgs := make([]string, 0, len(rawArgs))
+	for i := 0; i < len(rawArgs); i++ {
+		if rawArgs[i] == "--path" && i+1 < len(rawArgs) {
+			if rawArgs[i+1] != "" {
+				jobsBaseDir = rawArgs[i+1]
+			}
+			i++
+			continue
+		}
+		filteredArgs = append(filteredArgs, rawArgs[i])
+	}
+
+	cmd := filteredArgs[0]
+	args := filteredArgs[1:]
 
 	switch cmd {
 	case "run":
 		if len(args) < 1 {
-			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs run <command> [onSuccess] [onFailure] [onComplete]")
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs run <command> [onSuccess] [onFailure] [onComplete] [source] [cleanup]")
 			os.Exit(1)
 		}
 		onSuccess := ""
 		onFailure := ""
 		onComplete := ""
+		source := ""
+		cleanup := false
 		if len(args) >= 2 {
 			onSuccess = args[1]
 		}
@@ -123,10 +148,16 @@ func main() {
 		if len(args) >= 4 {
 			onComplete = args[3]
 		}
-		runJob(args[0], onSuccess, onFailure, onComplete)
+		if len(args) >= 5 {
+			source = args[4]
+		}
+		if len(args) >= 6 {
+			cleanup = args[5] == "true"
+		}
+		runJob(args[0], onSuccess, onFailure, onComplete, source, cleanup)
 	case "attach":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs attach <pid> <command> [stdoutFile] [stderrFile]")
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs attach <pid> <command> [stdoutFile] [stderrFile] [source]")
 			os.Exit(1)
 		}
 		pid, err := strconv.Atoi(args[0])
@@ -137,13 +168,17 @@ func main() {
 		command := args[1]
 		stdoutFile := ""
 		stderrFile := ""
+		source := ""
 		if len(args) >= 3 {
 			stdoutFile = args[2]
 		}
 		if len(args) >= 4 {
 			stderrFile = args[3]
 		}
-		attachJob(pid, command, stdoutFile, stderrFile)
+		if len(args) >= 5 {
+			source = args[4]
+		}
+		attachJob(pid, command, stdoutFile, stderrFile, source)
 	case "_monitor":
 		if len(args) < 2 {
 			os.Exit(1)
@@ -160,10 +195,14 @@ func main() {
 		monitorAttachedJob(args[0], pid)
 	case "list":
 		state := ""
+		source := ""
 		if len(args) >= 1 {
 			state = args[0]
 		}
-		listJobs(state)
+		if len(args) >= 2 {
+			source = args[1]
+		}
+		listJobs(state, source)
 	case "status":
 		if len(args) < 1 {
 			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs status <id>")
@@ -216,13 +255,33 @@ func main() {
 		killJob(args[0])
 	case "killall":
 		killAllJobs()
+	case "remove":
+		if len(args) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: aux4-jobs remove <id> [force]")
+			os.Exit(1)
+		}
+		force := false
+		if len(args) >= 2 {
+			force = args[1] == "true"
+		}
+		removeJob(args[0], force)
+	case "remove-all":
+		state := ""
+		source := ""
+		if len(args) >= 1 {
+			state = args[0]
+		}
+		if len(args) >= 2 {
+			source = args[1]
+		}
+		removeAllJobs(state, source)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		os.Exit(1)
 	}
 }
 
-func runJob(command, onSuccess, onFailure, onComplete string) {
+func runJob(command, onSuccess, onFailure, onComplete, source string, cleanup bool) {
 	id := allocateID()
 	cwd, _ := os.Getwd()
 
@@ -232,6 +291,8 @@ func runJob(command, onSuccess, onFailure, onComplete string) {
 		State:      "RUNNING",
 		StartTime:  time.Now().UTC().Format(time.RFC3339),
 		Dir:        cwd,
+		Source:     source,
+		Cleanup:    cleanup,
 		OnSuccess:  onSuccess,
 		OnFailure:  onFailure,
 		OnComplete: onComplete,
@@ -247,8 +308,11 @@ func runJob(command, onSuccess, onFailure, onComplete string) {
 		os.Exit(1)
 	}
 
+	absBase, _ := filepath.Abs(jobsBaseDir)
+
 	monitor := exec.Command(self, "_monitor", id, command)
 	monitor.Dir = cwd
+	monitor.Env = append(os.Environ(), "AUX4_JOBS_DIR="+absBase)
 	monitor.Stdin = nil
 	monitor.Stdout = nil
 	monitor.Stderr = nil
@@ -333,9 +397,13 @@ func monitorJob(id, command string) {
 		executeCallback(job, job.OnFailure)
 	}
 	executeCallback(job, job.OnComplete)
+
+	if job.Cleanup {
+		os.RemoveAll(jobDir(job.ID))
+	}
 }
 
-func attachJob(pid int, command, stdoutPath, stderrPath string) {
+func attachJob(pid int, command, stdoutPath, stderrPath, source string) {
 	if !isProcessRunning(pid) {
 		fmt.Fprintf(os.Stderr, "Error: process %d is not running\n", pid)
 		os.Exit(1)
@@ -352,6 +420,7 @@ func attachJob(pid int, command, stdoutPath, stderrPath string) {
 		State:     "RUNNING",
 		StartTime: time.Now().UTC().Format(time.RFC3339),
 		Dir:       cwd,
+		Source:    source,
 	}
 	if err := saveJob(job); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -379,8 +448,11 @@ func attachJob(pid int, command, stdoutPath, stderrPath string) {
 		os.Exit(1)
 	}
 
+	absBase, _ := filepath.Abs(jobsBaseDir)
+
 	monitor := exec.Command(self, "_monitor_attach", id, strconv.Itoa(pid))
 	monitor.Dir = cwd
+	monitor.Env = append(os.Environ(), "AUX4_JOBS_DIR="+absBase)
 	monitor.Stdin = nil
 	monitor.Stdout = nil
 	monitor.Stderr = nil
@@ -422,6 +494,10 @@ func monitorAttachedJob(id string, pid int) {
 
 	executeCallback(job, job.OnSuccess)
 	executeCallback(job, job.OnComplete)
+
+	if job.Cleanup {
+		os.RemoveAll(jobDir(job.ID))
+	}
 }
 
 func onJob(id, success, failure, complete string) {
@@ -508,14 +584,18 @@ func loadAllJobs() []*Job {
 	return result
 }
 
-func listJobs(state string) {
+func listJobs(state, source string) {
 	allJobs := loadAllJobs()
 
 	var result []Job
 	for _, job := range allJobs {
-		if state == "" || job.State == state {
-			result = append(result, *job)
+		if state != "" && job.State != state {
+			continue
 		}
+		if source != "" && job.Source != source {
+			continue
+		}
+		result = append(result, *job)
 	}
 	if result == nil {
 		result = []Job{}
@@ -523,6 +603,59 @@ func listJobs(state string) {
 
 	data, _ := json.Marshal(result)
 	fmt.Println(string(data))
+}
+
+func removeJob(id string, force bool) {
+	job, err := loadJob(id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	refreshState(job)
+
+	if job.State == "RUNNING" && !force {
+		fmt.Fprintf(os.Stderr, "Error: job %s is still running, use force=true to remove\n", id)
+		os.Exit(1)
+	}
+
+	if job.State == "RUNNING" && job.PID > 0 {
+		killProcess(job.PID)
+	}
+
+	if err := os.RemoveAll(jobDir(id)); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("job %s removed\n", id)
+}
+
+func removeAllJobs(state, source string) {
+	allJobs := loadAllJobs()
+
+	removed := 0
+	for _, job := range allJobs {
+		if state != "" && job.State != state {
+			continue
+		}
+		if source != "" && job.Source != source {
+			continue
+		}
+		if job.State == "RUNNING" {
+			continue
+		}
+		if err := os.RemoveAll(jobDir(job.ID)); err != nil {
+			fmt.Fprintf(os.Stderr, "Error removing job %s: %s\n", job.ID, err)
+			continue
+		}
+		fmt.Printf("job %s removed\n", job.ID)
+		removed++
+	}
+
+	if removed == 0 {
+		fmt.Println("no jobs removed")
+	}
 }
 
 func statusJob(id string) {

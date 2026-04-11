@@ -9,13 +9,16 @@ Optional callback commands can be specified to execute automatically when the jo
 #### Usage
 
 ```bash
-aux4 jobs run <command> [--onSuccess <command>] [--onFailure <command>] [--onComplete <command>]
+aux4 jobs run <command> [--onSuccess <cmd>] [--onFailure <cmd>] [--onComplete <cmd>] [--source <tag>] [--cleanup <true|false>] [--path <dir>]
 ```
 
 --command     The full command to run in the background (positional argument)
 --onSuccess   Command to run when the job succeeds (exit code 0). Default: empty
 --onFailure   Command to run when the job fails (non-zero exit code). Default: empty
 --onComplete  Command to run when the job finishes, regardless of outcome. Default: empty
+--source      Tag identifying who created the job. Use with `jobs list --source` to filter jobs created by a specific agent or process. Default: empty
+--cleanup     Auto-remove the job directory after callbacks finish. Default: `false`
+--path        Custom jobs storage directory. Default: `.jobs`
 
 #### Callback Execution Order
 
@@ -73,4 +76,23 @@ Run with an onComplete callback that uses environment variables:
 
 ```bash
 aux4 jobs run "npm test" --onComplete "echo Job $AUX4_JOB_ID finished with state $AUX4_JOB_STATE"
+```
+
+Tag a job so an agent can monitor only its own jobs:
+
+```bash
+aux4 jobs run "long-task.sh" --source agent-a
+aux4 jobs list --source agent-a
+```
+
+Auto-cleanup after the job finishes (useful for fire-and-forget jobs whose output you don't need to keep):
+
+```bash
+aux4 jobs run "send-notification.sh" --source notifier --cleanup true
+```
+
+Use a custom storage directory to isolate jobs from other agents sharing the same working directory:
+
+```bash
+aux4 jobs run "build.sh" --path .my-jobs --source builder
 ```
