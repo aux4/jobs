@@ -1,4 +1,4 @@
-# @aux4/jobs
+# aux4/jobs
 
 Background job manager for aux4. Run commands in the background, monitor their status, and retrieve their output.
 
