@@ -365,6 +365,28 @@
               }
             ]
           }
+        },
+        {
+          "name": "clean",
+          "execute": [
+            "${packageDir}/aux4-jobs --path value(path) clean values(olderThan)"
+          ],
+          "help": {
+            "text": "Remove finished jobs older than a given duration",
+            "variables": [
+              {
+                "name": "olderThan",
+                "text": "Remove jobs older than this duration (e.g. 24h, 12h, 30m)",
+                "default": "24h",
+                "arg": true
+              },
+              {
+                "name": "path",
+                "text": "Custom jobs storage directory",
+                "default": ".jobs"
+              }
+            ]
+          }
         }
       ]
     }

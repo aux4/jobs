@@ -275,6 +275,17 @@ func main() {
 			source = args[1]
 		}
 		removeAllJobs(state, source)
+	case "clean":
+		maxAge := 24 * time.Hour
+		if len(args) >= 1 {
+			parsed, err := time.ParseDuration(args[0])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Invalid duration: %s (use e.g. 24h, 12h, 30m)\n", args[0])
+				os.Exit(1)
+			}
+			maxAge = parsed
+		}
+		cleanOldJobs(maxAge)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		os.Exit(1)
@@ -606,29 +617,30 @@ func listJobs(state, source string) {
 }
 
 func removeJob(id string, force bool) {
-	job, err := loadJob(id)
-	if err != nil {
+	if err := doRemoveJob(id, force); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
+	}
+	fmt.Printf("job %s removed\n", id)
+}
+
+func doRemoveJob(id string, force bool) error {
+	job, err := loadJob(id)
+	if err != nil {
+		return err
 	}
 
 	refreshState(job)
 
 	if job.State == "RUNNING" && !force {
-		fmt.Fprintf(os.Stderr, "Error: job %s is still running, use force=true to remove\n", id)
-		os.Exit(1)
+		return fmt.Errorf("job %s is still running, use force=true to remove", id)
 	}
 
 	if job.State == "RUNNING" && job.PID > 0 {
 		killProcess(job.PID)
 	}
 
-	if err := os.RemoveAll(jobDir(id)); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("job %s removed\n", id)
+	return os.RemoveAll(jobDir(id))
 }
 
 func removeAllJobs(state, source string) {
@@ -645,7 +657,7 @@ func removeAllJobs(state, source string) {
 		if job.State == "RUNNING" {
 			continue
 		}
-		if err := os.RemoveAll(jobDir(job.ID)); err != nil {
+		if err := doRemoveJob(job.ID, false); err != nil {
 			fmt.Fprintf(os.Stderr, "Error removing job %s: %s\n", job.ID, err)
 			continue
 		}
@@ -655,6 +667,47 @@ func removeAllJobs(state, source string) {
 
 	if removed == 0 {
 		fmt.Println("no jobs removed")
+	}
+}
+
+func cleanOldJobs(maxAge time.Duration) {
+	allJobs := loadAllJobs()
+	cutoff := time.Now().Add(-maxAge)
+
+	removed := 0
+	for _, job := range allJobs {
+		if job.State == "RUNNING" {
+			continue
+		}
+
+		// Use EndTime if available, otherwise StartTime
+		ts := job.EndTime
+		if ts == "" {
+			ts = job.StartTime
+		}
+		if ts == "" {
+			continue
+		}
+
+		t, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			continue
+		}
+
+		if t.Before(cutoff) {
+			if err := doRemoveJob(job.ID, false); err != nil {
+				fmt.Fprintf(os.Stderr, "Error removing job %s: %s\n", job.ID, err)
+				continue
+			}
+			fmt.Printf("job %s removed (%s)\n", job.ID, job.State)
+			removed++
+		}
+	}
+
+	if removed == 0 {
+		fmt.Println("no jobs to clean")
+	} else {
+		fmt.Printf("%d jobs cleaned\n", removed)
 	}
 }
 

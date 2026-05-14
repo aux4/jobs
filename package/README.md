@@ -181,6 +181,21 @@ aux4 jobs list --path .my-jobs
 
 This lets multiple agents fully isolate their jobs from each other.
 
+### Clean old jobs
+
+Remove all finished jobs older than a given duration:
+
+```bash
+aux4 jobs clean 12h
+```
+
+```text
+job 2 removed
+job 5 removed
+```
+
+The default duration is `24h`. Any Go duration format is accepted (e.g. `24h`, `12h`, `30m`). Running jobs are always skipped.
+
 ### Removing jobs
 
 Remove a single finished job:
@@ -218,6 +233,7 @@ aux4 jobs remove-all --state FAILED
 | `aux4 jobs tail <id> [--stream] [--path]` | Tail job output in real time |
 | `aux4 jobs kill <id> [--path]` | Kill a running job |
 | `aux4 jobs killall [--path]` | Kill all running jobs |
+| `aux4 jobs clean [duration] [--path]` | Remove finished jobs older than the given duration (default: `24h`) |
 | `aux4 jobs remove <id> [--force] [--path]` | Remove a finished job from storage |
 | `aux4 jobs remove-all [--state] [--source] [--path]` | Remove all finished jobs (optionally filtered) |
 | `aux4 jobs on <id> [--success] [--failure] [--complete]` | Register callbacks on a running job |

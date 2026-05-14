@@ -342,6 +342,19 @@ stderr
 stdout
 ```
 
+## clean
+
+### should remove finished jobs older than duration
+
+```execute
+aux4 jobs run "echo cleanup-target" > /dev/null && sleep 1 && aux4 jobs clean 0s && aux4 jobs list | jq '[.[] | select(.command == "echo cleanup-target")] | length'
+```
+
+```expect:partial
+removed
+**0
+```
+
 ## remove-all
 
 ### should remove all completed jobs by source
